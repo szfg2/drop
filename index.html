@@ -4,23 +4,971 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Drop</title>
-<meta name="theme-color" content="#171817" />
-<link rel="manifest" href="manifest.webmanifest" />
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="manifest" href="manifest.webmanifest" />
 <link rel="apple-touch-icon" href="icon-192.png" />
+<meta name="theme-color" content="#171817" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Drop" />
+<!-- Shared with the RES tools, which live in the notionwidget repo on the same site. -->
+<script src="../notionwidget/keyvault.data.js"></script>
+<script src="../notionwidget/keyvault.js"></script>
+<script src="../notionwidget/reshome.js"></script>
 <style>
-  html, body { margin: 0; height: 100%; background: #171817; }
-  iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+  :root {
+    --bg: #171817;
+    --surface: #1f201f;
+    --surface-2: #252625;
+    --border: #343633;
+    --border-strong: #464944;
+    --text: #eeece8;
+    --muted: #9a9892;
+    --faint: #73716c;
+    --accent: #65c1a7;
+    --accent-strong: #81d4bd;
+    --accent-soft: rgba(101, 193, 167, .12);
+    --danger: #e68a82;
+    --paper: #fbfaf7;
+    --ink: #1c1b1a;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  button { font-family: inherit; }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+  header.app { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 18px; }
+  h1 { font-size: 19px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 3px; }
+  .sub { color: var(--muted); font-size: 12.5px; margin: 0; }
+  .sub a { color: var(--accent-strong); text-decoration: none; }
+  .sub a:hover { text-decoration: underline; }
+
+  .sync { flex: none; font-size: 11.5px; color: var(--muted); padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; white-space: nowrap; }
+  .sync.busy { color: var(--accent-strong); border-color: var(--accent); }
+  .sync.err { color: var(--danger); border-color: var(--danger); }
+
+  .notice { margin: 0 0 16px; padding: 12px 14px; font-size: 13px; color: var(--text); background: var(--surface); border: 1px solid var(--border-strong); border-left: 3px solid var(--danger); border-radius: 8px; }
+  .notice a { color: var(--accent-strong); }
+
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+  .zone { min-height: 128px; max-height: 50vh; overflow: auto; padding: 16px 18px; border: 1.5px dashed var(--border-strong); border-radius: 12px; background: var(--surface); outline: none; transition: border-color .12s ease, background .12s ease; }
+  .zone:focus { border-color: var(--accent); }
+  .zone.empty::before { content: attr(data-placeholder); color: var(--faint); pointer-events: none; }
+  .zone.filled { background: var(--paper); color: var(--ink); border-style: solid; }
+  .zone img { max-width: 100%; height: auto; }
+  .zone.flash { border-color: var(--accent); background: var(--accent-soft); }
+
+  .zone-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 0 20px; }
+  .hint { color: var(--faint); font-size: 12px; }
+
+  .btn { padding: 7px 13px; font-size: 12.5px; font-weight: 600; line-height: 1; color: var(--text); background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 8px; cursor: pointer; white-space: nowrap; }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #10201b; }
+  .btn.primary:hover { background: var(--accent-strong); }
+  .btn.danger { color: var(--danger); }
+  .btn.small { padding: 5px 10px; font-size: 12px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  .viewer-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .when { color: var(--muted); font-size: 12.5px; }
+  .actions { display: flex; gap: 6px; }
+
+  .paper { background: var(--paper); color: var(--ink); border-radius: 12px; padding: 16px 18px; overflow-x: auto; font: 14px/1.5 Calibri, "Segoe UI", Arial, sans-serif; }
+  .paper img { max-width: 100%; height: auto; }
+  .paper table { border-collapse: collapse; }
+  .paper td, .paper th { border: 1px solid #d9d6cf; padding: 3px 7px; vertical-align: top; }
+  .paper p { margin: 0 0 .6em; }
+  .paper a { color: #1a5fb4; }
+  .paper > :last-child { margin-bottom: 0; }
+
+  aside.log { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; position: sticky; top: 16px; max-height: calc(100vh - 32px); }
+  @media (max-width: 860px) { aside.log { position: static; max-height: none; } }
+  .log-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .log-head h2 { margin: 0; font-size: 14px; font-weight: 650; }
+  .count { color: var(--faint); font-weight: 500; margin-left: 4px; }
+  .list { list-style: none; margin: 0; padding: 6px; overflow-y: auto; }
+  .day { padding: 10px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
+  .row { display: flex; align-items: stretch; gap: 4px; border-radius: 8px; }
+  .row.sel { background: var(--accent-soft); }
+  .row:not(.sel):hover { background: var(--surface-2); }
+  .pick { flex: 1; min-width: 0; display: flex; gap: 10px; align-items: flex-start; padding: 8px; text-align: left; color: inherit; background: none; border: 0; cursor: pointer; }
+  .pick-text { flex: 1; min-width: 0; }
+  .meta { display: flex; gap: 8px; font-size: 11.5px; color: var(--muted); }
+  .meta .time { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .prev { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 12.5px; color: var(--muted); word-break: break-word; }
+  .thumb { flex: none; width: 46px; height: 46px; object-fit: cover; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); }
+  .mini { flex: none; width: 34px; display: grid; place-items: center; color: var(--muted); background: none; border: 0; border-radius: 8px; cursor: pointer; }
+  .mini:hover { color: var(--accent-strong); }
+  .mini svg { width: 16px; height: 16px; }
+  .empty { margin: 0; padding: 18px 14px; color: var(--faint); font-size: 13px; }
+
+  .foot { margin-top: 22px; color: var(--faint); font-size: 12px; }
+  .linkish { padding: 0; font-size: 12px; color: var(--accent-strong); background: none; border: 0; cursor: pointer; }
+
+  .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); padding: 8px 14px; font-size: 13px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 999px; box-shadow: 0 10px 30px rgba(0,0,0,.4); opacity: 0; pointer-events: none; transition: opacity .15s ease; }
+  .toast.show { opacity: 1; }
 </style>
 </head>
 <body>
-<!-- The installable shell for Drop. The page itself lives in the notionwidget repo; this
-     app sits outside that folder so it can be installed and appear in the Android share sheet. -->
-<iframe id="drop" title="Drop" allow="clipboard-read; clipboard-write"></iframe>
+<div class="wrap">
+  <header class="app">
+    <div>
+      <h1>Drop</h1>
+      <p class="sub"><a href="../notionwidget/RES.html">← Respiratory tools</a> · Paste text or pictures here, then open this page on another device to pick them up.</p>
+    </div>
+    <span id="sync" class="sync">Not connected</span>
+  </header>
+
+  <div id="setup" class="notice" hidden>
+    This browser has no GitHub token. Press <b>Unlock keys</b> (bottom left) and enter your code, or add the token under <a href="../notionwidget/dictation.html">Dictation → Settings</a>.
+  </div>
+
+  <div class="layout">
+    <main>
+      <div id="zone" class="zone empty" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Paste or type here"
+           data-placeholder="Click here and paste (Ctrl+V) and it's saved straight away. Or type a note and press Save."></div>
+      <div class="zone-bar">
+        <span class="hint">Ctrl+V anywhere on the page saves instantly · Ctrl+Enter saves what you've typed</span>
+        <div class="actions">
+          <button id="uploadBtn" class="btn">Add picture</button>
+          <button id="saveBtn" class="btn primary">Save</button>
+        </div>
+        <input id="fileInput" type="file" accept="image/*" multiple hidden />
+      </div>
+
+      <section id="viewer" hidden>
+        <div class="viewer-head">
+          <span id="viewerWhen" class="when"></span>
+          <div class="actions">
+            <button id="copyBtn" class="btn">Copy</button>
+            <button id="downloadBtn" class="btn" hidden>Download</button>
+            <button id="deleteBtn" class="btn danger">Delete</button>
+          </div>
+        </div>
+        <div id="viewerBody" class="paper"></div>
+      </section>
+    </main>
+
+    <aside class="log" aria-label="Saved items">
+      <div class="log-head">
+        <h2>Log<span id="count" class="count"></span></h2>
+        <button id="clearBtn" class="btn small danger">Clear all</button>
+      </div>
+      <ol id="list" class="list"></ol>
+      <p id="empty" class="empty">Nothing saved yet.</p>
+    </aside>
+  </div>
+
+  <p class="foot">Saved in your private GitHub repo (<span id="where"></span>). No patient identifiers. · This device: <button id="deviceBtn" class="linkish"></button></p>
+</div>
+<div id="toast" class="toast" role="status"></div>
+
 <script>
-  document.getElementById("drop").src = "/notionwidget/drop.html" + location.search;
+(function () {
+  "use strict";
+
+  const $ = id => document.getElementById(id);
+  function get(k) { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } }
+  function set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+  // Shares the GitHub token and repo that Dictation and the ward lists use (unlocked by keyvault.js).
+  const K = {
+    token: "dictation_gh_token", owner: "dictation_gh_owner", repo: "dictation_gh_repo",
+    branch: "dictation_gh_branch", dir: "drop_gh_path", device: "drop_device"
+  };
+  function cfg() {
+    return {
+      token: get(K.token), owner: get(K.owner) || "szfg2", repo: get(K.repo) || "patient-data",
+      branch: get(K.branch) || "main", dir: (get(K.dir) || "drop").replace(/^\/+|\/+$/g, "")
+    };
+  }
+
+  /* ---------- encoding ---------- */
+  function bytesToB64(bytes) {
+    let s = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  const textToB64 = t => bytesToB64(new TextEncoder().encode(t));
+  const b64ToText = b => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\s/g, "")), c => c.charCodeAt(0)));
+  async function blobToB64(blob) { return bytesToB64(new Uint8Array(await blob.arrayBuffer())); }
+  function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(blob);
+    });
+  }
+
+  /* ---------- GitHub ---------- */
+  async function gh(path, opts) {
+    const c = cfg();
+    opts = opts || {};
+    const headers = {
+      "Accept": opts.accept || "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "Authorization": "Bearer " + c.token
+    };
+    let url = "https://api.github.com/repos/" + c.owner + "/" + c.repo + "/contents/" +
+      path.split("/").map(encodeURIComponent).join("/");
+    const init = { method: opts.method || "GET", headers, cache: "no-store" };
+    if (opts.body) {
+      headers["content-type"] = "application/json";
+      init.body = JSON.stringify(Object.assign({ branch: c.branch }, opts.body));
+    } else {
+      url += "?ref=" + encodeURIComponent(c.branch);
+    }
+    const res = await fetch(url, init);
+    if (!res.ok) {
+      let msg = "HTTP " + res.status;
+      try { msg = (await res.json()).message || msg; } catch (e) {}
+      const err = new Error(msg);
+      err.status = res.status;
+      throw err;
+    }
+    return res;
+  }
+
+  const indexPath = () => cfg().dir + "/index.json";
+
+  async function readIndex() {
+    let meta;
+    try { meta = await (await gh(indexPath())).json(); }
+    catch (e) { if (e.status === 404) return { items: [], sha: null }; throw e; }
+    // Files over 1 MB come back without content, so fetch those raw.
+    const raw = meta.encoding === "base64" && meta.content
+      ? b64ToText(meta.content)
+      : await (await gh(indexPath(), { accept: "application/vnd.github.raw+json" })).text();
+    let items = [];
+    try { items = JSON.parse(raw).items || []; } catch (e) {}
+    return { items, sha: meta.sha };
+  }
+
+  // Re-reads before every write so two devices saving at once don't overwrite each other.
+  async function changeIndex(mutate, message) {
+    for (let attempt = 0; ; attempt++) {
+      const cur = await readIndex();
+      const next = mutate(cur.items.slice());
+      const body = { message, content: textToB64(JSON.stringify({ v: 1, items: next }, null, 1)) };
+      if (cur.sha) body.sha = cur.sha;
+      try { await gh(indexPath(), { method: "PUT", body }); return next; }
+      catch (e) { if ((e.status === 409 || e.status === 422) && attempt < 3) continue; throw e; }
+    }
+  }
+
+  async function deleteFiles(keep) {
+    let entries;
+    try { entries = await (await gh(cfg().dir)).json(); } catch (e) { if (e.status === 404) return; throw e; }
+    for (const f of entries) {
+      if (f.type !== "file" || keep(f.name)) continue;
+      await gh(f.path, { method: "DELETE", body: { message: "Drop: remove " + f.name, sha: f.sha } });
+    }
+  }
+
+  /* ---------- images ---------- */
+  const MIME = { png: "image/png", webp: "image/webp", jpg: "image/jpeg", gif: "image/gif" };
+  const extOf = type => ({ "image/png": "png", "image/webp": "webp", "image/jpeg": "jpg", "image/gif": "gif" })[type] || "png";
+  const mimeOf = name => MIME[name.split(".").pop()] || "image/png";
+
+  const blobCache = new Map();
+  function imageBlob(name) {
+    if (!blobCache.has(name)) {
+      const p = gh(cfg().dir + "/" + name, { accept: "application/vnd.github.raw+json" })
+        .then(r => r.blob())
+        .then(b => new Blob([b], { type: mimeOf(name) }));
+      p.catch(() => blobCache.delete(name));
+      blobCache.set(name, p);
+    }
+    return blobCache.get(name);
+  }
+  const urlCache = new Map();
+  function imageUrl(name) {
+    if (!urlCache.has(name)) {
+      const p = imageBlob(name).then(b => URL.createObjectURL(b));
+      p.catch(() => urlCache.delete(name));
+      urlCache.set(name, p);
+    }
+    return urlCache.get(name);
+  }
+
+  // Small screenshots stay as crisp PNGs; big ones are shrunk so they upload quickly on the work network.
+  async function compress(blob) {
+    if (blob.type === "image/gif") return blob;
+    let bmp;
+    try { bmp = await createImageBitmap(blob); } catch (e) { return blob; }
+    const scale = Math.min(1, 2400 / Math.max(bmp.width, bmp.height));
+    if (scale === 1 && blob.size <= 400 * 1024) return blob;
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(bmp.width * scale);
+    cv.height = Math.round(bmp.height * scale);
+    const ctx = cv.getContext("2d");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.drawImage(bmp, 0, 0, cv.width, cv.height);
+    const encode = (type, q) => new Promise(r => cv.toBlob(r, type, q));
+    let out = await encode("image/webp", 0.9);
+    if (!out || out.type !== "image/webp") out = await encode("image/jpeg", 0.9);
+    return out && out.size < blob.size ? out : blob;
+  }
+
+  async function toPng(blob) {
+    if (blob.type === "image/png") return blob;
+    const bmp = await createImageBitmap(blob);
+    const cv = document.createElement("canvas");
+    cv.width = bmp.width;
+    cv.height = bmp.height;
+    cv.getContext("2d").drawImage(bmp, 0, 0);
+    return new Promise(r => cv.toBlob(r, "image/png"));
+  }
+
+  /* ---------- rich-text cleaning ---------- */
+  // Keeps formatting (bold, colours, tables, lists, links) and drops anything that could run code.
+  const KEEP_TAGS = new Set(("A B I U S STRIKE EM STRONG SUB SUP SMALL BIG MARK CODE PRE KBD BLOCKQUOTE P DIV SPAN BR HR " +
+    "H1 H2 H3 H4 H5 H6 UL OL LI DL DT DD TABLE THEAD TBODY TFOOT TR TD TH CAPTION COLGROUP COL IMG FONT CENTER").split(" "));
+  const SKIP_TAGS = new Set(("SCRIPT STYLE META LINK TITLE HEAD NOSCRIPT IFRAME FRAME OBJECT EMBED SVG MATH TEMPLATE " +
+    "XML BUTTON INPUT SELECT TEXTAREA FORM CANVAS VIDEO AUDIO").split(" "));
+  const KEEP_STYLE = /^(color|background-color|font-weight|font-style|font-size|font-family|text-decoration(-line|-color|-style)?|text-align|vertical-align|white-space|text-indent|margin-left|list-style-type|width|height|border-collapse|border(-(top|right|bottom|left))?(-(width|style|color))?|padding(-(top|right|bottom|left))?)$/;
+
+  // Excel and Word put much of their formatting in a <style> block; copy it onto the elements.
+  function inlineSheets(doc) {
+    const fromSheets = new Map();
+    doc.querySelectorAll("style").forEach(st => {
+      let sheet;
+      try { sheet = new CSSStyleSheet(); sheet.replaceSync(st.textContent.replace(/<!--|-->/g, "")); } catch (e) { return; }
+      for (const rule of Array.from(sheet.cssRules)) {
+        if (!rule.selectorText || !rule.style) continue;
+        let els;
+        try { els = doc.body.querySelectorAll(rule.selectorText); } catch (e) { continue; }
+        els.forEach(el => {
+          const props = fromSheets.get(el) || {};
+          for (let i = 0; i < rule.style.length; i++) {
+            const p = rule.style[i];
+            if (KEEP_STYLE.test(p)) props[p] = rule.style.getPropertyValue(p);
+          }
+          fromSheets.set(el, props);
+        });
+      }
+    });
+    fromSheets.forEach((props, el) => {
+      Object.keys(props).forEach(p => { if (!el.style.getPropertyValue(p)) el.style.setProperty(p, props[p]); });
+    });
+  }
+
+  function copyAttrs(src, el, tag) {
+    const digits = (a) => { const v = src.getAttribute(a); if (/^\d+$/.test(v || "")) el.setAttribute(a, v); };
+    if (tag === "A") {
+      const h = src.getAttribute("href") || "";
+      if (/^(https?:|mailto:)/i.test(h)) { el.setAttribute("href", h); el.setAttribute("target", "_blank"); el.setAttribute("rel", "noopener"); }
+    } else if (tag === "IMG") {
+      const s = src.getAttribute("src") || "";
+      const drop = src.getAttribute("data-drop") || "";
+      if (/^data:image\/(png|jpe?g|gif|webp|bmp);/i.test(s) || /^https:/i.test(s)) el.setAttribute("src", s);
+      else if (/^[\w.-]+$/.test(drop)) el.setAttribute("data-drop", drop);
+      else el.setAttribute("data-missing", "1");
+      if (src.getAttribute("alt")) el.setAttribute("alt", src.getAttribute("alt"));
+      digits("width"); digits("height");
+    } else if (tag === "TD" || tag === "TH") {
+      digits("colspan"); digits("rowspan");
+    } else if (tag === "COL" || tag === "COLGROUP") {
+      digits("span"); digits("width");
+    } else if (tag === "OL") {
+      digits("start");
+      if (/^[1aAiI]$/.test(src.getAttribute("type") || "")) el.setAttribute("type", src.getAttribute("type"));
+    } else if (tag === "FONT" && src.getAttribute("color")) {
+      el.style.color = src.getAttribute("color");
+    }
+    const st = src.style;
+    if (st) for (let i = 0; i < st.length; i++) {
+      const p = st[i], v = st.getPropertyValue(p);
+      if (KEEP_STYLE.test(p) && !/url\(|expression/i.test(v)) el.style.setProperty(p, v);
+    }
+  }
+
+  /* ---------- colour fixing ---------- */
+  // Text copied from dark-mode apps arrives as white-on-black highlights; the paper is light, so undo that.
+  const PAPER = [251, 250, 247];
+  const colorCtx = document.createElement("canvas").getContext("2d");
+  function rgbOf(v) {
+    if (!v || /^(transparent|inherit|initial|unset|currentcolor|windowtext|window)$/i.test(v.trim())) return null;
+    colorCtx.fillStyle = "#010203";
+    colorCtx.fillStyle = v;
+    const s = colorCtx.fillStyle;
+    if (s === "#010203") return null;
+    let m = /^#(..)(..)(..)$/.exec(s);
+    if (m) return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+    m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/.exec(s);
+    if (m && (m[4] == null || +m[4] > 0.4)) return [+m[1], +m[2], +m[3]];
+    return null;
+  }
+  function lum(c) {
+    const f = x => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+  }
+  const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+
+  // Returns the background the element's children sit on.
+  function fixColors(el, tag, bg) {
+    const fill = rgbOf(el.style.backgroundColor);
+    if (fill) {
+      // Dark fills are kept only on table cells (e.g. Excel header rows); dark highlights on text are dropped.
+      if (lum(fill) < 0.18 && !/^(TD|TH|TR|THEAD|TABLE)$/.test(tag)) el.style.removeProperty("background-color");
+      else bg = fill;
+    }
+    const ink = rgbOf(el.style.color);
+    if (ink && contrast(ink, bg) < 3) el.style.removeProperty("color");
+    if (!el.style.color && fill && bg === fill && lum(bg) < 0.18) el.style.color = "#fff";
+    return bg;
+  }
+
+  function cleanInto(src, dst, bg) {
+    bg = bg || PAPER;
+    for (const n of Array.from(src.childNodes)) {
+      if (n.nodeType === 3) { dst.appendChild(document.createTextNode(n.nodeValue)); continue; }
+      if (n.nodeType !== 1) continue;
+      const tag = n.tagName.toUpperCase();
+      if (SKIP_TAGS.has(tag) || tag.indexOf(":") >= 0) continue;   // o:p, v:shape and other Office tags
+      if (!KEEP_TAGS.has(tag)) { cleanInto(n, dst, bg); continue; }
+      const el = document.createElement(tag === "FONT" ? "span" : tag === "CENTER" ? "div" : tag.toLowerCase());
+      copyAttrs(n, el, tag);
+      if (tag === "CENTER") el.style.textAlign = "center";
+      cleanInto(n, el, fixColors(el, tag, bg));
+      dst.appendChild(el);
+    }
+  }
+
+  function sanitize(html) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    inlineSheets(doc);
+    const box = document.createElement("div");
+    cleanInto(doc.body, box);
+    return box;
+  }
+
+  const hasContent = box => !!(box.textContent.trim() || box.querySelector("img[src], img[data-drop]"));
+
+  /* ---------- clipboard → html ---------- */
+  // Clipboard data vanishes once the paste event ends, so grab it synchronously.
+  const IMG_EXT = /\.(png|jpe?g|gif|webp|bmp|heic|heif|avif|tiff?)$/i;
+  const isImageFile = f => /^image\//.test(f.type) || IMG_EXT.test(f.name || "");
+  // Copying a picture file (Explorer, Snipping Tool, phone gallery) also puts its filename on the clipboard as text.
+  const isFileNames = t => t.split(/[\r\n]+/).every(l => { l = l.trim(); return !l || (IMG_EXT.test(l) && l.length < 260); });
+
+  function snapshot(dt) {
+    const files = [];
+    Array.from(dt.items || []).forEach(it => {
+      if (it.kind === "file") { const f = it.getAsFile(); if (f && isImageFile(f)) files.push(f); }
+    });
+    if (!files.length) Array.from(dt.files || []).forEach(f => { if (isImageFile(f)) files.push(f); });
+    return { html: dt.getData("text/html"), text: dt.getData("text/plain"), files };
+  }
+
+  // Browsers can't show HEIC/TIFF etc., so redraw those as JPEG.
+  async function displayable(f) {
+    if (/^image\/(png|jpeg|gif|webp|bmp)$/.test(f.type)) return f;
+    try {
+      const bmp = await createImageBitmap(f);
+      const cv = document.createElement("canvas");
+      cv.width = bmp.width;
+      cv.height = bmp.height;
+      cv.getContext("2d").drawImage(bmp, 0, 0);
+      return (await new Promise(r => cv.toBlob(r, "image/jpeg", 0.9))) || f;
+    } catch (e) { return f; }
+  }
+
+  async function filesToHtml(files) {
+    const box = document.createElement("div");
+    for (const f of files) {
+      const img = document.createElement("img");
+      img.src = await blobToDataUrl(await displayable(f));
+      box.appendChild(img);
+    }
+    return sanitize(box.innerHTML).innerHTML;
+  }
+
+  async function clipboardToHtml(snap) {
+    if (snap.files.length && (isFileNames(snap.text || "") || (!snap.text && !/<img/i.test(snap.html || "")))) {
+      return filesToHtml(snap.files);
+    }
+    const files = snap.files.slice();
+    let box = document.createElement("div");
+    if (snap.html) box = sanitize(snap.html);
+    if (!hasContent(box) && !box.querySelector("img")) {
+      box.innerHTML = "";
+      if (snap.text && !files.length) {
+        const d = document.createElement("div");
+        d.style.whiteSpace = "pre-wrap";
+        d.textContent = snap.text;
+        box.appendChild(d);
+      }
+    }
+    // Images the page can't reach (file:// from Word, web images) are swapped for the copied picture itself.
+    for (const img of Array.from(box.querySelectorAll("img"))) {
+      if (/^data:/.test(img.getAttribute("src") || "")) continue;
+      const f = files.shift();
+      if (f) { img.setAttribute("src", await blobToDataUrl(await displayable(f))); img.removeAttribute("data-missing"); }
+      else if (img.hasAttribute("data-missing")) img.remove();
+    }
+    // Excel also puts a picture of the cells on the clipboard; only use leftover pictures when there's no text.
+    if (files.length && !box.textContent.trim()) {
+      for (const f of files) {
+        const img = document.createElement("img");
+        img.src = await blobToDataUrl(await displayable(f));
+        box.appendChild(img);
+      }
+    }
+    return hasContent(box) ? box.innerHTML : "";
+  }
+
+  /* ---------- state ---------- */
+  let items = [];
+  let selected = null;
+  let busy = 0;
+  let lastSig = "";
+  let loaded = false;
+
+  function device() {
+    const saved = get(K.device);
+    if (saved) return saved;
+    const ua = navigator.userAgent;
+    if (/iPad/.test(ua)) return "iPad";
+    if (/iPhone/.test(ua)) return "iPhone";
+    if (/Android/.test(ua)) return /Mobile/.test(ua) ? "Android phone" : "Android tablet";
+    if (/Windows/.test(ua)) return "Windows";
+    if (/Mac/.test(ua)) return "Mac";
+    return "Browser";
+  }
+
+  function newId() {
+    const d = new Date(), p = n => String(n).padStart(2, "0");
+    return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) +
+      "-" + Math.random().toString(36).slice(2, 6);
+  }
+
+  const hhmm = d => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  function dayLabel(ts) {
+    const d = new Date(ts), today = new Date();
+    const start = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+    const diff = Math.round((start(today) - start(d)) / 864e5);
+    if (diff === 0) return "Today";
+    if (diff === 1) return "Yesterday";
+    return d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+  }
+
+  /* ---------- UI helpers ---------- */
+  function setSync(state, text) {
+    const s = $("sync");
+    s.className = "sync" + (state ? " " + state : "");
+    s.textContent = text;
+    s.title = state === "err" ? text : "";
+  }
+  let toastTimer = null;
+  function toast(text) {
+    const t = $("toast");
+    t.textContent = text;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 1800);
+  }
+  function el(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  const COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
+
+  /* ---------- rendering ---------- */
+  function render() {
+    const list = $("list");
+    list.innerHTML = "";
+    $("count").textContent = items.length ? " · " + items.length : "";
+    $("empty").hidden = items.length > 0;
+    $("clearBtn").disabled = !items.length;
+    let lastDay = "";
+    items.forEach(it => {
+      const day = dayLabel(it.ts);
+      if (day !== lastDay) { list.appendChild(el("li", "day", day)); lastDay = day; }
+      const li = el("li", "row" + (it.id === selected ? " sel" : ""));
+      li.dataset.id = it.id;
+      const pick = el("button", "pick");
+      pick.dataset.act = "pick";
+      if (it.images && it.images.length) {
+        const img = el("img", "thumb");
+        img.alt = "";
+        imageUrl(it.images[0]).then(u => { img.src = u; }).catch(() => {});
+        pick.appendChild(img);
+      }
+      const txt = el("span", "pick-text");
+      const meta = el("span", "meta");
+      meta.append(el("span", "time", hhmm(new Date(it.ts))), el("span", "", it.from || ""));
+      const n = it.images ? it.images.length : 0;
+      const prev = it.text || (n ? (n === 1 ? "Picture" : n + " pictures") : "");
+      txt.append(meta, el("span", "prev", prev));
+      pick.appendChild(txt);
+      const mini = el("button", "mini");
+      mini.dataset.act = "copy";
+      mini.title = "Copy";
+      mini.setAttribute("aria-label", "Copy");
+      mini.innerHTML = COPY_ICON;
+      li.append(pick, mini);
+      list.appendChild(li);
+    });
+    renderViewer();
+  }
+
+  function renderViewer() {
+    const it = items.find(x => x.id === selected);
+    $("viewer").hidden = !it;
+    if (!it) return;
+    const d = new Date(it.ts);
+    $("viewerWhen").textContent = d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: "numeric" }) +
+      ", " + hhmm(d) + (it.from ? " · from " + it.from : "");
+    $("downloadBtn").hidden = !(it.images && it.images.length);
+    const body = $("viewerBody");
+    if (body.dataset.id === it.id) return;
+    body.dataset.id = it.id;
+    body.innerHTML = sanitize(it.html).innerHTML;
+    body.querySelectorAll("img[data-missing]").forEach(i => i.remove());
+    body.querySelectorAll("img[data-drop]").forEach(img => {
+      imageUrl(img.getAttribute("data-drop")).then(u => { img.src = u; }).catch(() => { img.alt = "Picture failed to load"; });
+    });
+  }
+
+  function select(id, scroll) {
+    selected = id;
+    render();
+    if (scroll && matchMedia("(max-width: 860px)").matches) $("viewer").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /* ---------- saving ---------- */
+  async function save(html) {
+    if (!cfg().token) { $("setup").hidden = false; toast("Unlock your keys first"); return false; }
+    const box = sanitize(html);
+    box.querySelectorAll("img[data-missing]").forEach(i => i.remove());
+    if (!hasContent(box)) return false;
+
+    busy++;
+    setSync("busy", "Saving…");
+    const id = newId();
+    const images = [];
+    try {
+      const imgs = Array.from(box.querySelectorAll('img[src^="data:"]'));
+      for (let i = 0; i < imgs.length; i++) {
+        setSync("busy", imgs.length > 1 ? "Uploading picture " + (i + 1) + " of " + imgs.length + "…" : "Uploading picture…");
+        const blob = await compress(await (await fetch(imgs[i].getAttribute("src"))).blob());
+        const name = id + "-" + (i + 1) + "." + extOf(blob.type);
+        await gh(cfg().dir + "/" + name, { method: "PUT", body: { message: "Drop: add " + name, content: await blobToB64(blob) } });
+        blobCache.set(name, Promise.resolve(new Blob([blob], { type: mimeOf(name) })));
+        imgs[i].removeAttribute("src");
+        imgs[i].setAttribute("data-drop", name);
+        images.push(name);
+      }
+      const item = {
+        id, ts: Date.now(), from: device(), html: box.innerHTML,
+        text: box.textContent.replace(/\s+/g, " ").trim().slice(0, 300), images
+      };
+      items = await changeIndex(list => [item].concat(list.filter(x => x.id !== id)), "Drop: add item");
+      lastSig = sig(items);
+      selected = id;
+      render();
+      setSync("", "Saved " + hhmm(new Date()));
+      toast("Saved");
+      return true;
+    } catch (e) {
+      setSync("err", "Save failed: " + e.message);
+      toast("Save failed — " + e.message);
+      // Don't lose it: put it back in the box to retry.
+      const zone = $("zone");
+      if (zone.textContent.trim() === "" && !zone.querySelector("img")) { zone.innerHTML = html; updateZone(); }
+      if (images.length) deleteFiles(n => images.indexOf(n) < 0).catch(() => {});
+      return false;
+    } finally {
+      busy--;
+    }
+  }
+
+  /* ---------- loading ---------- */
+  const sig = list => list.map(i => i.id).join(",");
+
+  async function refresh() {
+    if (!cfg().token) { $("setup").hidden = false; setSync("err", "No GitHub token"); return; }
+    $("setup").hidden = true;
+    if (busy) return;
+    try {
+      const { items: list } = await readIndex();
+      if (busy) return;
+      if (sig(list) !== lastSig || !loaded) {
+        items = list;
+        lastSig = sig(list);
+        if (selected && !items.some(i => i.id === selected)) selected = null;
+        if (!loaded && !selected && items.length && matchMedia("(min-width: 861px)").matches) selected = items[0].id;
+        loaded = true;
+        render();
+      }
+      setSync("", "Synced " + hhmm(new Date()));
+    } catch (e) {
+      setSync("err", e.status === 401 ? "GitHub token rejected" : "Can't reach GitHub: " + e.message);
+    }
+  }
+
+  /* ---------- copy / download / delete ---------- */
+  function plainText(html) {
+    const tmp = el("div");
+    tmp.style.cssText = "position:fixed;left:-9999px;top:0;white-space:normal";
+    tmp.innerHTML = html;
+    document.body.appendChild(tmp);
+    const t = tmp.innerText;
+    tmp.remove();
+    return t.trim();
+  }
+
+  async function htmlWithImages(it) {
+    const box = sanitize(it.html);
+    for (const img of Array.from(box.querySelectorAll("img[data-drop]"))) {
+      img.src = await blobToDataUrl(await imageBlob(img.getAttribute("data-drop")));
+      img.removeAttribute("data-drop");
+    }
+    return box.innerHTML;
+  }
+
+  function copyItem(it) {
+    const onlyPicture = !it.text && it.images && it.images.length === 1;
+    const text = plainText(sanitize(it.html).innerHTML);
+    // The clipboard write must start inside the click, so hand it promises rather than awaiting first.
+    let data;
+    if (onlyPicture) {
+      data = { "image/png": imageBlob(it.images[0]).then(toPng) };
+    } else {
+      data = {
+        "text/html": htmlWithImages(it).then(h => new Blob(['<meta charset="utf-8">' + h], { type: "text/html" })),
+        "text/plain": new Blob([text], { type: "text/plain" })
+      };
+    }
+    let p;
+    try {
+      p = window.ClipboardItem && navigator.clipboard && navigator.clipboard.write
+        ? navigator.clipboard.write([new ClipboardItem(data)])
+        : Promise.reject(new Error("unsupported"));
+    } catch (e) { p = Promise.reject(e); }
+    p.then(() => toast(onlyPicture ? "Picture copied" : "Copied with formatting"))
+      .catch(() => {
+        if (onlyPicture) { toast("This browser can't copy pictures — use Download"); return; }
+        (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject())
+          .then(() => toast("Copied as plain text"), () => toast("Couldn't copy"));
+      });
+  }
+
+  async function downloadItem(it) {
+    for (const name of it.images || []) {
+      const a = el("a");
+      a.href = URL.createObjectURL(await imageBlob(name));
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    }
+  }
+
+  async function removeItems(ids, label) {
+    busy++;
+    setSync("busy", label);
+    const all = ids === null;
+    const gone = all ? items.slice() : items.filter(i => ids.indexOf(i.id) >= 0);
+    try {
+      items = await changeIndex(list => all ? [] : list.filter(i => ids.indexOf(i.id) < 0), all ? "Drop: clear all" : "Drop: delete item");
+      lastSig = sig(items);
+      if (!items.some(i => i.id === selected)) selected = null;
+      render();
+      const names = [].concat.apply([], gone.map(i => i.images || []));
+      await deleteFiles(all ? (n => n === "index.json") : (n => names.indexOf(n) < 0));
+      setSync("", "Synced " + hhmm(new Date()));
+      toast(all ? "Cleared" : "Deleted");
+    } catch (e) {
+      setSync("err", "Delete failed: " + e.message);
+      toast("Delete failed — " + e.message);
+    } finally {
+      busy--;
+    }
+  }
+
+  /* ---------- paste box ---------- */
+  const zone = $("zone");
+  function zoneEmpty() { return !zone.textContent.trim() && !zone.querySelector("img"); }
+  function updateZone() {
+    const empty = zoneEmpty();
+    zone.classList.toggle("empty", empty);
+    zone.classList.toggle("filled", !empty);
+    if (empty && zone.innerHTML) zone.innerHTML = "";
+  }
+  function flash() {
+    zone.classList.add("flash");
+    setTimeout(() => zone.classList.remove("flash"), 500);
+  }
+
+  async function handlePaste(dt, intoZone) {
+    await place(await clipboardToHtml(snapshot(dt)), intoZone, "Nothing to save on the clipboard");
+  }
+
+  async function addFiles(list) {
+    const files = Array.from(list || []).filter(isImageFile);
+    if (!files.length) { toast("No pictures chosen"); return; }
+    await place(await filesToHtml(files), true, "Couldn't read that picture");
+  }
+
+  async function place(html, intoZone, emptyMsg) {
+    if (!html) { toast(emptyMsg); return; }
+    if (intoZone && !zoneEmpty()) {
+      // Adding to a note being typed: insert, and save when they press Save.
+      zone.focus();
+      document.execCommand("insertHTML", false, html);
+      updateZone();
+      return;
+    }
+    flash();
+    await save(html);
+  }
+
+  async function saveZone() {
+    if (zoneEmpty()) { zone.focus(); return; }
+    const html = zone.innerHTML;
+    zone.innerHTML = "";
+    updateZone();
+    await save(html);
+  }
+
+  zone.addEventListener("paste", e => { e.preventDefault(); handlePaste(e.clipboardData, true); });
+  zone.addEventListener("input", updateZone);
+  zone.addEventListener("keydown", e => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveZone(); }
+  });
+  document.addEventListener("paste", e => {
+    if (e.defaultPrevented) return;
+    const t = e.target;
+    if (t && t.closest && t.closest("input, textarea, [contenteditable]")) return;
+    e.preventDefault();
+    handlePaste(e.clipboardData, false);
+  });
+  $("saveBtn").addEventListener("click", saveZone);
+  $("uploadBtn").addEventListener("click", () => $("fileInput").click());
+  $("fileInput").addEventListener("change", e => { const f = e.target.files; addFiles(f).finally(() => { e.target.value = ""; }); });
+  document.addEventListener("dragover", e => { if (Array.from(e.dataTransfer.types).indexOf("Files") >= 0) e.preventDefault(); });
+  document.addEventListener("drop", e => {
+    if (!e.dataTransfer.files.length) return;
+    e.preventDefault();
+    addFiles(e.dataTransfer.files);
+  });
+
+  /* ---------- log & viewer events ---------- */
+  $("list").addEventListener("click", e => {
+    const btn = e.target.closest("button");
+    const row = e.target.closest(".row");
+    if (!btn || !row) return;
+    const it = items.find(x => x.id === row.dataset.id);
+    if (!it) return;
+    if (btn.dataset.act === "copy") copyItem(it);
+    else select(it.id, true);
+  });
+  $("copyBtn").addEventListener("click", () => { const it = items.find(x => x.id === selected); if (it) copyItem(it); });
+  $("downloadBtn").addEventListener("click", () => { const it = items.find(x => x.id === selected); if (it) downloadItem(it).catch(e => toast("Download failed — " + e.message)); });
+  $("deleteBtn").addEventListener("click", () => {
+    if (selected && confirm("Delete this item from every device?")) removeItems([selected], "Deleting…");
+  });
+  $("clearBtn").addEventListener("click", () => {
+    if (items.length && confirm("Clear all " + items.length + " items from every device?")) removeItems(null, "Clearing…");
+  });
+
+  $("deviceBtn").textContent = device();
+  $("deviceBtn").addEventListener("click", () => {
+    const name = prompt("Name this device (shown next to what it saves):", device());
+    if (name && name.trim()) { set(K.device, name.trim().slice(0, 30)); $("deviceBtn").textContent = device(); }
+  });
+  const c0 = cfg();
+  $("where").textContent = c0.owner + "/" + c0.repo + "/" + c0.dir;
+
+  /* ---------- Android share sheet ---------- */
+  // sw.js parks anything shared to the installed app in this cache; it's saved here and then removed.
+  // Items wait in the cache if keys are locked or the save fails, and are retried next time the page opens.
+  const SHARE_CACHE = "drop-share";
+
+  function addText(box, text, bold) {
+    const d = el("div");
+    d.style.whiteSpace = "pre-wrap";
+    if (bold) d.style.fontWeight = "700";
+    text.split(/(https?:\/\/[^\s<>"]+)/).forEach((part, i) => {
+      if (i % 2) { const a = el("a", "", part); a.href = part; d.appendChild(a); }
+      else if (part) d.appendChild(document.createTextNode(part));
+    });
+    box.appendChild(d);
+  }
+
+  async function sharedToHtml(meta, files) {
+    const title = (meta.title || "").trim(), text = (meta.text || "").trim(), url = (meta.url || "").trim();
+    const box = el("div");
+    if (title && text.indexOf(title) < 0) addText(box, title, !!(text || url));
+    if (text) addText(box, text);
+    if (url && text.indexOf(url) < 0) addText(box, url);
+    const pics = files.filter(isImageFile);
+    if (pics.length) box.insertAdjacentHTML("beforeend", await filesToHtml(pics));
+    return hasContent(box) ? box.innerHTML : "";
+  }
+
+  let taking = false;
+  async function takeShared() {
+    if (taking || !window.caches) return;
+    taking = true;
+    try {
+      const cache = await caches.open(SHARE_CACHE);
+      const metas = (await cache.keys()).filter(r => /\.json$/.test(r.url)).sort((a, b) => a.url < b.url ? -1 : 1);
+      if (!metas.length) return;
+      if (!cfg().token) { $("setup").hidden = false; toast("Unlock your keys — the shared item will save then"); return; }
+      for (const req of metas) {
+        const base = req.url.replace(/\.json$/, "/");
+        const meta = await (await cache.match(req)).json();
+        const files = [];
+        for (let i = 0; i < meta.files; i++) {
+          const r = await cache.match(base + i);
+          if (r) files.push(new File([await r.blob()], decodeURIComponent(r.headers.get("x-name") || "") || "shared", { type: r.headers.get("content-type") || "" }));
+        }
+        const html = await sharedToHtml(meta, files);
+        if (html) {
+          flash();
+          const wasEmpty = zoneEmpty();
+          // A failed save puts the item back in the paste box; it's still queued here, so clear that to avoid saving it twice.
+          if (!(await save(html))) { if (wasEmpty) { zone.innerHTML = ""; updateZone(); } break; }
+        }
+        else toast("Nothing in that share Drop can keep");
+        await cache.delete(req);
+        for (let i = 0; i < meta.files; i++) await cache.delete(base + i);
+      }
+    } catch (e) {
+      toast("Couldn't read the shared item — " + e.message);
+    } finally {
+      taking = false;
+    }
+  }
+
+  if (/[?&]share-failed/.test(location.search)) toast("Sharing to Drop failed — try again");
   if (location.search) history.replaceState(null, "", location.pathname);
-  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+    // Retire the share worker left over from when Drop lived at notionwidget/drop.html.
+    navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => {
+      if (/\/notionwidget\/drop$/.test(r.scope)) r.unregister();
+    })).catch(() => {});
+  }
+
+  /* ---------- sync ---------- */
+  refresh();
+  takeShared();
+  setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 20000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { refresh(); takeShared(); } });
+  window.addEventListener("focus", refresh);
+})();
 </script>
 </body>
 </html>

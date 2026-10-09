@@ -4,9 +4,8 @@
  *  Android sends a share as a form upload (a POST) to /drop/?share-target.
  *  GitHub Pages can't accept uploads, so this worker catches it on the
  *  device, parks the text and pictures in the "drop-share" cache, and
- *  opens the app. Caches belong to the whole szfg2.github.io site, so the
- *  real Drop page (notionwidget/drop.html, shown inside this app) can read
- *  them, save them to GitHub, and clear them.
+ *  opens the app, whose page (index.html) saves them to GitHub and clears
+ *  them.
  * ====================================================================== */
 
 const SHARE_CACHE = "drop-share";
