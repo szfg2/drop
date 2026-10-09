@@ -155,7 +155,10 @@
     <aside class="log" aria-label="Saved items">
       <div class="log-head">
         <h2>Log<span id="count" class="count"></span></h2>
-        <button id="clearBtn" class="btn small danger">Clear all</button>
+        <div class="actions">
+          <button id="picsBtn" class="btn small danger" title="Delete every stored picture; text is kept">Delete pictures</button>
+          <button id="clearBtn" class="btn small danger">Clear all</button>
+        </div>
       </div>
       <ol id="list" class="list"></ol>
       <p id="empty" class="empty">Nothing saved yet.</p>
@@ -588,6 +591,7 @@
     $("count").textContent = items.length ? " · " + items.length : "";
     $("empty").hidden = items.length > 0;
     $("clearBtn").disabled = !items.length;
+    $("picsBtn").disabled = !pictureCount();
     let lastDay = "";
     items.forEach(it => {
       const day = dayLabel(it.ts);
@@ -692,7 +696,8 @@
   }
 
   /* ---------- loading ---------- */
-  const sig = list => list.map(i => i.id).join(",");
+  // Includes picture counts so other devices notice when pictures are stripped from an item.
+  const sig = list => list.map(i => i.id + ":" + (i.images ? i.images.length : 0)).join(",");
 
   async function refresh() {
     if (!cfg().token) { $("setup").hidden = false; setSync("err", "No GitHub token"); return; }
@@ -796,6 +801,43 @@
     }
   }
 
+  const pictureCount = () => items.reduce((n, i) => n + (i.images ? i.images.length : 0), 0);
+
+  // Items that were only a picture go; items with text keep the text and lose their pictures.
+  function withoutPictures(it) {
+    if (!it.images || !it.images.length) return it;
+    const box = sanitize(it.html);
+    box.querySelectorAll("img").forEach(img => img.remove());
+    if (!hasContent(box)) return null;
+    return Object.assign({}, it, {
+      html: box.innerHTML, images: [], text: box.textContent.replace(/\s+/g, " ").trim().slice(0, 300)
+    });
+  }
+
+  async function removePictures() {
+    busy++;
+    setSync("busy", "Deleting pictures…");
+    try {
+      items = await changeIndex(list => list.map(withoutPictures).filter(Boolean), "Drop: delete all pictures");
+      lastSig = sig(items);
+      if (!items.some(i => i.id === selected)) selected = null;
+      $("viewerBody").dataset.id = "";
+      render();
+      // Also sweeps up any picture files no longer listed in the index.
+      await deleteFiles(n => n === "index.json");
+      blobCache.clear();
+      urlCache.forEach(p => p.then(u => URL.revokeObjectURL(u)).catch(() => {}));
+      urlCache.clear();
+      setSync("", "Synced " + hhmm(new Date()));
+      toast("Pictures deleted");
+    } catch (e) {
+      setSync("err", "Delete failed: " + e.message);
+      toast("Delete failed — " + e.message);
+    } finally {
+      busy--;
+    }
+  }
+
   /* ---------- paste box ---------- */
   const zone = $("zone");
   function zoneEmpty() { return !zone.textContent.trim() && !zone.querySelector("img"); }
@@ -877,6 +919,14 @@
   $("downloadBtn").addEventListener("click", () => { const it = items.find(x => x.id === selected); if (it) downloadItem(it).catch(e => toast("Download failed — " + e.message)); });
   $("deleteBtn").addEventListener("click", () => {
     if (selected && confirm("Delete this item from every device?")) removeItems([selected], "Deleting…");
+  });
+  $("picsBtn").addEventListener("click", () => {
+    const n = pictureCount();
+    if (!n) return;
+    const only = items.filter(i => i.images && i.images.length && !i.text).length;
+    if (confirm("Delete all " + n + " picture" + (n === 1 ? "" : "s") + " from every device?" +
+      (only ? " " + only + " item" + (only === 1 ? " that is" : "s that are") + " only a picture will be removed;" : "") +
+      " text is kept.")) removePictures();
   });
   $("clearBtn").addEventListener("click", () => {
     if (items.length && confirm("Clear all " + items.length + " items from every device?")) removeItems(null, "Clearing…");
