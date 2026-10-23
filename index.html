@@ -86,8 +86,9 @@
 
   aside.log { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; position: sticky; top: 16px; max-height: calc(100vh - 32px); }
   @media (max-width: 860px) { aside.log { position: static; max-height: none; } }
-  .log-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+  .log-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
   .log-head h2 { margin: 0; font-size: 14px; font-weight: 650; }
+  .log-head .actions { flex-wrap: wrap; justify-content: flex-end; }
   .count { color: var(--faint); font-weight: 500; margin-left: 4px; }
   .list { list-style: none; margin: 0; padding: 6px; overflow-y: auto; }
   .day { padding: 10px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
@@ -156,6 +157,7 @@
       <div class="log-head">
         <h2>Log<span id="count" class="count"></span></h2>
         <div class="actions">
+          <button id="todayBtn" class="btn small danger" title="Delete everything saved today">Delete today</button>
           <button id="picsBtn" class="btn small danger" title="Delete every stored picture; text is kept">Delete pictures</button>
           <button id="clearBtn" class="btn small danger">Clear all</button>
         </div>
@@ -592,6 +594,7 @@
     $("empty").hidden = items.length > 0;
     $("clearBtn").disabled = !items.length;
     $("picsBtn").disabled = !pictureCount();
+    $("todayBtn").disabled = !todayIds().length;
     let lastDay = "";
     items.forEach(it => {
       const day = dayLabel(it.ts);
@@ -801,6 +804,7 @@
     }
   }
 
+  const todayIds = () => items.filter(i => dayLabel(i.ts) === "Today").map(i => i.id);
   const pictureCount = () => items.reduce((n, i) => n + (i.images ? i.images.length : 0), 0);
 
   // Items that were only a picture go; items with text keep the text and lose their pictures.
@@ -919,6 +923,10 @@
   $("downloadBtn").addEventListener("click", () => { const it = items.find(x => x.id === selected); if (it) downloadItem(it).catch(e => toast("Download failed — " + e.message)); });
   $("deleteBtn").addEventListener("click", () => {
     if (selected && confirm("Delete this item from every device?")) removeItems([selected], "Deleting…");
+  });
+  $("todayBtn").addEventListener("click", () => {
+    const ids = todayIds();
+    if (ids.length && confirm("Delete all " + ids.length + " item" + (ids.length === 1 ? "" : "s") + " saved today from every device?")) removeItems(ids, "Deleting today…");
   });
   $("picsBtn").addEventListener("click", () => {
     const n = pictureCount();
