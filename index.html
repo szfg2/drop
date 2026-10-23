@@ -91,7 +91,9 @@
   .log-head .actions { flex-wrap: wrap; justify-content: flex-end; }
   .count { color: var(--faint); font-weight: 500; margin-left: 4px; }
   .list { list-style: none; margin: 0; padding: 6px; overflow-y: auto; }
-  .day { padding: 10px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
+  .day { display: flex; align-items: center; justify-content: space-between; padding: 10px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); }
+  .day-del { padding: 2px 6px; font: inherit; color: var(--faint); background: none; border: 0; border-radius: 6px; cursor: pointer; }
+  .day-del:hover { color: var(--danger); background: var(--surface-2); }
   .row { display: flex; align-items: stretch; gap: 4px; border-radius: 8px; }
   .row.sel { background: var(--accent-soft); }
   .row:not(.sel):hover { background: var(--surface-2); }
@@ -594,11 +596,19 @@
     $("empty").hidden = items.length > 0;
     $("clearBtn").disabled = !items.length;
     $("picsBtn").disabled = !pictureCount();
-    $("todayBtn").disabled = !todayIds().length;
+    $("todayBtn").disabled = !idsOn("Today").length;
     let lastDay = "";
     items.forEach(it => {
       const day = dayLabel(it.ts);
-      if (day !== lastDay) { list.appendChild(el("li", "day", day)); lastDay = day; }
+      if (day !== lastDay) {
+        const head = el("li", "day");
+        const del = el("button", "day-del", "Delete");
+        del.dataset.day = day;
+        del.title = "Delete everything saved on " + day;
+        head.append(el("span", "", day), del);
+        list.appendChild(head);
+        lastDay = day;
+      }
       const li = el("li", "row" + (it.id === selected ? " sel" : ""));
       li.dataset.id = it.id;
       const pick = el("button", "pick");
@@ -804,7 +814,14 @@
     }
   }
 
-  const todayIds = () => items.filter(i => dayLabel(i.ts) === "Today").map(i => i.id);
+  const idsOn = day => items.filter(i => dayLabel(i.ts) === day).map(i => i.id);
+
+  function deleteDay(day) {
+    const ids = idsOn(day);
+    const when = day === "Today" || day === "Yesterday" ? day.toLowerCase() : "on " + day;
+    if (ids.length && confirm("Delete all " + ids.length + " item" + (ids.length === 1 ? "" : "s") + " saved " + when + " from every device?"))
+      removeItems(ids, "Deleting " + (day === "Today" || day === "Yesterday" ? when : day) + "…");
+  }
   const pictureCount = () => items.reduce((n, i) => n + (i.images ? i.images.length : 0), 0);
 
   // Items that were only a picture go; items with text keep the text and lose their pictures.
@@ -912,6 +929,7 @@
   /* ---------- log & viewer events ---------- */
   $("list").addEventListener("click", e => {
     const btn = e.target.closest("button");
+    if (btn && btn.dataset.day) return deleteDay(btn.dataset.day);
     const row = e.target.closest(".row");
     if (!btn || !row) return;
     const it = items.find(x => x.id === row.dataset.id);
@@ -924,10 +942,7 @@
   $("deleteBtn").addEventListener("click", () => {
     if (selected && confirm("Delete this item from every device?")) removeItems([selected], "Deleting…");
   });
-  $("todayBtn").addEventListener("click", () => {
-    const ids = todayIds();
-    if (ids.length && confirm("Delete all " + ids.length + " item" + (ids.length === 1 ? "" : "s") + " saved today from every device?")) removeItems(ids, "Deleting today…");
-  });
+  $("todayBtn").addEventListener("click", () => deleteDay("Today"));
   $("picsBtn").addEventListener("click", () => {
     const n = pictureCount();
     if (!n) return;
