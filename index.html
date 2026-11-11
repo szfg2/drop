@@ -15,6 +15,8 @@
 <script src="../notionwidget/keyvault.data.js"></script>
 <script src="../notionwidget/keyvault.js"></script>
 <script src="../notionwidget/reshome.js"></script>
+<!-- ?embed: the compact version shown inside the Drop popup on the RES tools (see reshome.js). -->
+<script>if (/[?&]embed\b/.test(location.search)) document.documentElement.classList.add("embed");</script>
 <style>
   :root {
     --bg: #171817;
@@ -113,6 +115,14 @@
 
   .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); padding: 8px 14px; font-size: 13px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 999px; box-shadow: 0 10px 30px rgba(0,0,0,.4); opacity: 0; pointer-events: none; transition: opacity .15s ease; }
   .toast.show { opacity: 1; }
+
+  .embed .wrap { padding: 10px 12px 16px; }
+  .embed header.app { justify-content: flex-end; margin-bottom: 8px; }
+  .embed header.app > div, .embed .foot, .embed .res-home-row, .embed .zone-bar .hint { display: none; }
+  .embed .layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .embed .zone { min-height: 84px; }
+  .embed .zone-bar { justify-content: flex-end; margin: 6px 0 12px; }
+  .embed aside.log { position: static; max-height: none; }
 </style>
 </head>
 <body>
@@ -126,7 +136,7 @@
   </header>
 
   <div id="setup" class="notice" hidden>
-    This browser has no GitHub token. Press <b>Unlock keys</b> (bottom left) and enter your code, or add the token under <a href="../notionwidget/dictation.html">Dictation → Settings</a>.
+    This browser has no GitHub token. Press <b>Unlock keys</b> (bottom left) and enter your code, or add the token under <a href="../notionwidget/dictation.html" target="_top">Dictation → Settings</a>.
   </div>
 
   <div class="layout">
@@ -1025,8 +1035,9 @@
     }
   }
 
+  const EMBED = document.documentElement.classList.contains("embed");
   if (/[?&]share-failed/.test(location.search)) toast("Sharing to Drop failed — try again");
-  if (location.search) history.replaceState(null, "", location.pathname);
+  if (location.search) history.replaceState(null, "", location.pathname + (EMBED ? "?embed" : ""));
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
     // Retire the share worker left over from when Drop lived at notionwidget/drop.html.
@@ -1036,10 +1047,21 @@
   }
 
   /* ---------- sync ---------- */
+  // In the popup, the tool page says when the popup opens or closes, so a hidden popup doesn't keep polling GitHub.
+  let shown = true;
+  if (EMBED) {
+    window.addEventListener("message", e => {
+      if (e.source !== window.parent) return;
+      if (e.data === "drop:show") { shown = true; refresh(); zone.focus(); }
+      else if (e.data === "drop:hide") shown = false;
+    });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") window.parent.postMessage("drop:close", "*"); });
+  }
+
   refresh();
   takeShared();
-  setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 20000);
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { refresh(); takeShared(); } });
+  setInterval(() => { if (shown && document.visibilityState === "visible") refresh(); }, 20000);
+  document.addEventListener("visibilitychange", () => { if (shown && document.visibilityState === "visible") { refresh(); takeShared(); } });
   window.addEventListener("focus", refresh);
 })();
 </script>
