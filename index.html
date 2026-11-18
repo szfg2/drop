@@ -754,12 +754,35 @@
     return t.trim();
   }
 
+  // Word and most record editors ignore white-space: pre-wrap and run the lines together, so give them real <br>s.
+  function hardBreaks(box) {
+    const keepsLines = n => {
+      for (let p = n.parentElement; p; p = p.parentElement) {
+        const ws = p.style.whiteSpace;
+        if (ws) return /^(pre|break-spaces)/.test(ws);
+        if (p.tagName === "PRE") return true;
+      }
+      return false;
+    };
+    const w = document.createTreeWalker(box, NodeFilter.SHOW_TEXT), hits = [];
+    while (w.nextNode()) if (/\n/.test(w.currentNode.nodeValue) && keepsLines(w.currentNode)) hits.push(w.currentNode);
+    for (const n of hits) {
+      const frag = document.createDocumentFragment();
+      n.nodeValue.split(/\r?\n/).forEach((line, i) => {
+        if (i) frag.appendChild(document.createElement("br"));
+        if (line) frag.appendChild(document.createTextNode(line));
+      });
+      n.replaceWith(frag);
+    }
+  }
+
   async function htmlWithImages(it) {
     const box = sanitize(it.html);
     for (const img of Array.from(box.querySelectorAll("img[data-drop]"))) {
       img.src = await blobToDataUrl(await imageBlob(img.getAttribute("data-drop")));
       img.removeAttribute("data-drop");
     }
+    hardBreaks(box);
     return box.innerHTML;
   }
 
